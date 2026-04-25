@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PayAgent — Payment Collection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0b0f1a;
+      --panel:        #111827;
+      --surface:      #1a2236;
+      --border:       #1f2d45;
+      --gold:         #f0b429;
+      --gold-dim:     #b07d10;
+      --cyan:         #38bdf8;
+      --green:        #34d399;
+      --red:          #f87171;
+      --orange:       #fb923c;
+      --text:         #e2e8f0;
+      --text-muted:   #64748b;
+      --text-dim:     #94a3b8;
+      --agent-bubble: #162032;
+      --user-bubble:  #0f2540;
+      --user-border:  #1e4976;
+      --font-mono:    'IBM Plex Mono', monospace;
+      --font-head:    'Syne', sans-serif;
+      --font-body:    'DM Sans', sans-serif;
+      --radius:       14px;
+      --radius-sm:    8px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.6; overflow: hidden; }
+
+    /* ── Layout ── */
+    .shell { display: grid; grid-template-columns: 268px 1fr 280px; grid-template-rows: 100vh; height: 100vh; }
+
+    /* ── Sidebar Left ── */
+    .sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px 18px; gap: 24px; overflow-y: auto; }
+    .sidebar::-webkit-scrollbar { width: 3px; } .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 36px; height: 36px; background: var(--gold); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+    .logo-text { font-family: var(--font-head); font-weight: 800; font-size: 17px; letter-spacing: -0.5px; }
+    .logo-text span { color: var(--gold); }
+
+    /* Mock banner */
+    .mock-banner { background: rgba(251,146,60,0.12); border: 1px solid rgba(251,146,60,0.4); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 12px; color: var(--orange); display: none; }
+    .mock-banner.visible { display: block; }
+    .mock-banner strong { display: block; margin-bottom: 2px; }
+
+    /* API status */
+    .api-indicator { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 11px; }
+    .api-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; transition: background 0.3s; }
+    .api-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+    .api-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .api-dot.mock { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+    .api-label { flex: 1; color: var(--text-dim); }
+    .api-check-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; cursor: pointer; transition: all .15s; }
+    .api-check-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* Flow steps */
+    .section-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
+    .steps { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+    .step { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--radius-sm); transition: background 0.2s; }
+    .step.active { background: rgba(240,180,41,0.08); }
+    .step-dot { width: 7px; height: 7px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; transition: all 0.3s; }
+    .step.done .step-dot   { background: var(--green); border-color: var(--green); }
+    .step.active .step-dot { background: var(--gold);  border-color: var(--gold); box-shadow: 0 0 7px var(--gold); }
+    .step-name { font-size: 12px; color: var(--text-dim); }
+    .step.active .step-name { color: var(--text); font-weight: 500; }
+    .step.done  .step-name  { color: var(--green); }
+
+    /* Quick fills */
+    .quickfills { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+    .qf-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; padding: 7px 11px; cursor: pointer; text-align: left; transition: all .18s; }
+    .qf-btn:hover { border-color: var(--gold-dim); color: var(--gold); background: rgba(240,180,41,0.05); }
+    .qf-label { display: block; font-family: var(--font-body); font-size: 10px; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .reset-btn { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); font-family: var(--font-body); font-size: 13px; padding: 9px; cursor: pointer; transition: all .18s; margin-top: auto; }
+    .reset-btn:hover { border-color: var(--red); color: var(--red); background: rgba(248,113,113,0.05); }
+
+    /* ── Main ── */
+    .main { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
+
+    .chat-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--panel); flex-shrink: 0; }
+    .chat-title { font-family: var(--font-head); font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+    .chat-subtitle { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .session-badge { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px; }
+    .state-badge { font-family: var(--font-mono); font-size: 10px; color: var(--cyan); background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2); border-radius: 20px; padding: 3px 9px; }
+
+    /* Error bar */
+    .error-bar { background: rgba(248,113,113,0.1); border-bottom: 1px solid rgba(248,113,113,0.3); padding: 9px 24px; font-size: 12.5px; color: var(--red); display: none; align-items: center; gap: 10px; flex-shrink: 0; }
+    .error-bar.visible { display: flex; }
+    .error-bar code { background: rgba(248,113,113,0.15); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; }
+
+    /* Messages */
+    .messages { flex: 1; overflow-y: auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+    .messages::-webkit-scrollbar { width: 4px; } .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .msg-row { display: flex; gap: 10px; animation: slideUp .22s ease-out both; }
+    @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .msg-row.user { flex-direction: row-reverse; }
+
+    .avatar { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; align-self: flex-end; }
+    .avatar.agent { background: var(--gold); }
+    .avatar.user  { background: var(--user-border); }
+
+    .bubble { max-width: 72%; padding: 12px 16px; border-radius: var(--radius); font-size: 14px; line-height: 1.65; }
+    .bubble.agent { background: var(--agent-bubble); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .bubble.user  { background: var(--user-bubble); border: 1px solid var(--user-border); border-bottom-right-radius: 4px; color: var(--cyan); }
+    .bubble.error-bubble { background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.3); color: var(--red); }
+    .bubble strong { color: var(--gold); font-weight: 600; }
+    .bubble code { font-family: var(--font-mono); background: rgba(56,189,248,0.1); color: var(--cyan); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; }
+
+    .ts { font-size: 10px; color: var(--text-muted); margin-top: 3px; font-family: var(--font-mono); }
+    .msg-row.user .ts { text-align: right; }
+
+    .typing-row { display: flex; gap: 10px; align-items: flex-end; }
+    .typing-bubble { background: var(--agent-bubble); border: 1px solid var(--border); border-radius: var(--radius); border-bottom-left-radius: 4px; padding: 14px 18px; display: flex; gap: 5px; }
+    .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: typing 1.2s infinite ease-in-out; }
+    .typing-dot:nth-child(2){animation-delay:.2s} .typing-dot:nth-child(3){animation-delay:.4s}
+    @keyframes typing { 0%,60%,100%{transform:translateY(0);opacity:.4} 30%{transform:translateY(-5px);opacity:1} }
+
+    /* Input */
+    .input-bar { padding: 14px 24px 18px; border-top: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+    .input-wrap { display: flex; gap: 10px; align-items: flex-end; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px; transition: border-color .2s; }
+    .input-wrap:focus-within { border-color: var(--gold-dim); }
+    #msg-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-family: var(--font-body); font-size: 14px; resize: none; max-height: 100px; min-height: 24px; line-height: 1.5; }
+    #msg-input::placeholder { color: var(--text-muted); }
+    .send-btn { width: 34px; height: 34px; background: var(--gold); border: none; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .18s; font-size: 15px; }
+    .send-btn:hover { background: #d4940a; } .send-btn:disabled { background: var(--border); cursor: not-allowed; }
+    .input-hint { font-size: 10.5px; color: var(--text-muted); margin-top: 6px; text-align: center; font-family: var(--font-mono); }
+
+    /* Welcome card */
+    .welcome-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; border-left: 3px solid var(--gold); }
+    .welcome-title { font-family: var(--font-head); font-size: 15px; font-weight: 700; margin-bottom: 7px; color: var(--gold); }
+    .welcome-accounts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }
+    .wa-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; cursor: pointer; transition: all .18s; }
+    .wa-card:hover { border-color: var(--gold-dim); background: rgba(240,180,41,0.05); }
+    .wa-id   { font-family: var(--font-mono); font-size: 11.5px; color: var(--gold); font-weight: 500; }
+    .wa-name { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .wa-bal  { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; font-family: var(--font-mono); }
+
+    /* ── Debug Sidebar Right ── */
+    .debug-panel { background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
+    .debug-header { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .debug-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+    .debug-tabs { display: flex; gap: 2px; }
+    .dtab { background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; padding: 3px 8px; cursor: pointer; transition: all .15s; }
+    .dtab.active { border-color: var(--cyan); color: var(--cyan); background: rgba(56,189,248,0.08); }
+    .debug-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .debug-body::-webkit-scrollbar { width: 3px; } .debug-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+    /* Turn cards */
+    .turn-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px; }
+    .turn-card .turn-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .turn-state { color: var(--cyan); }
+    .turn-user { color: var(--text-dim); font-size: 11.5px; margin-bottom: 4px; }
+    .turn-user span { color: var(--text-muted); }
+    .turn-agent { color: var(--text); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+    /* API health card */
+    .health-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .health-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; }
+    .health-row:last-child { border-bottom: none; }
+    .health-key { color: var(--text-muted); font-family: var(--font-mono); font-size: 10.5px; }
+    .health-val { color: var(--text); font-family: var(--font-mono); font-size: 10.5px; }
+    .health-val.ok  { color: var(--green); }
+    .health-val.err { color: var(--red); }
+    .health-val.warn { color: var(--orange); }
+
+    .run-debug-btn { width: 100%; background: rgba(56,189,248,0.06); border: 1px solid rgba(56,189,248,0.25); border-radius: var(--radius-sm); color: var(--cyan); font-family: var(--font-mono); font-size: 11px; padding: 8px; cursor: pointer; transition: all .18s; }
+    .run-debug-btn:hover { background: rgba(56,189,248,0.12); }
+
+    .empty-debug { text-align: center; color: var(--text-muted); font-size: 12px; padding: 30px 0; font-family: var(--font-mono); }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 20px; right: 20px; background: #1e0f0f; border: 1px solid var(--red); color: var(--red); border-radius: var(--radius-sm); padding: 10px 16px; font-size: 13px; animation: toastIn .25s ease-out; z-index: 999; max-width: 360px; }
+    @keyframes toastIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Sidebar Left ── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">💳</div>
+      <div class="logo-text">Pay<span>Agent</span></div>
+    </div>
+
+    <!-- Mock mode banner (shown when MOCK_API=1) -->
+    <div class="mock-banner {% if mock_mode %}visible{% endif %}" id="mock-banner">
+      <strong>⚡ Mock Mode Active</strong>
+      Real API calls are disabled. Using local test data.
+    </div>
+
+    <!-- API Status -->
+    <div class="api-indicator">
+      <div class="api-dot {% if mock_mode %}mock{% endif %}" id="api-dot"></div>
+      <span class="api-label" id="api-label">{% if mock_mode %}MOCK DATA{% else %}Checking API…{% endif %}</span>
+      <button class="api-check-btn" onclick="runDebug()">test</button>
+    </div>
+
+    <!-- Flow steps -->
+    <div>
+      <div class="section-label">Conversation Flow</div>
+      <div class="steps" id="flow-steps">
+        <div class="step active" data-step="greeting"><div class="step-dot"></div><span class="step-name">1. Greeting</span></div>
+        <div class="step" data-step="lookup"><div class="step-dot"></div><span class="step-name">2. Account Lookup</span></div>
+        <div class="step" data-step="verification"><div class="step-dot"></div><span class="step-name">3. Identity Verification</span></div>
+        <div class="step" data-step="balance"><div class="step-dot"></div><span class="step-name">4. Balance Review</span></div>
+        <div class="step" data-step="amount"><div class="step-dot"></div><span class="step-name">5. Payment Amount</span></div>
+        <div class="step" data-step="card"><div class="step-dot"></div><span class="step-name">6. Card Details</span></div>
+        <div class="step" data-step="done"><div class="step-dot"></div><span class="step-name">7. Complete</span></div>
+      </div>
+    </div>
+
+    <!-- Quick fills -->
+    <div>
+      <div class="section-label">Quick Fill — Test Data</div>
+      <div class="quickfills">
+        <button class="qf-btn" onclick="quickFill('ACC1001')"><span class="qf-label">Account ID</span>ACC1001</button>
+        <button class="qf-btn" onclick="quickFill('Nithin Jain')"><span class="qf-label">Name (ACC1001)</span>Nithin Jain</button>
+        <button class="qf-btn" onclick="quickFill('1990-05-14')"><span class="qf-label">DOB (ACC1001)</span>1990-05-14</button>
+        <button class="qf-btn" onclick="quickFill('4321')"><span class="qf-label">Aadhaar Last 4</span>4321</button>
+        <button class="qf-btn" onclick="quickFill('400001')"><span class="qf-label">Pincode</span>400001</button>
+        <button class="qf-btn" onclick="quickFill('4532015112830366')"><span class="qf-label">Valid Card No.</span>4532015112830366</button>
+        <button class="qf-btn" onclick="quickFill('123')"><span class="qf-label">CVV</span>123</button>
+        <button class="qf-btn" onclick="quickFill('12/2027')"><span class="qf-label">Expiry</span>12/2027</button>
+      </div>
+    </div>
+
+    <button class="reset-btn" onclick="resetSession()">🔄 New Session</button>
+  </aside>
+
+  <!-- ── Main Chat ── -->
+  <main class="main">
+    <div class="chat-header">
+      <div>
+        <div class="chat-title">Payment Collection Agent</div>
+        <div class="chat-subtitle">Secure · Verified · Conversational</div>
+      </div>
+      <div class="header-right">
+        <div class="state-badge" id="state-badge">GREETING</div>
+        <div class="session-badge" id="session-badge">session: —</div>
+      </div>
+    </div>
+
+    <!-- Error bar (appears when API is unreachable) -->
+    <div class="error-bar" id="error-bar">
+      <span>⚠️</span>
+      <span id="error-bar-text"></span>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="welcome-card">
+        <div class="welcome-title">🔐 Test Account Reference</div>
+        <div style="font-size:13px;color:var(--text-dim)">Click any card to auto-fill its Account ID. Use sidebar quick-fills for other fields.</div>
+        <div class="welcome-accounts">
+          <div class="wa-card" onclick="quickFill('ACC1001')"><div class="wa-id">ACC1001</div><div class="wa-name">Nithin Jain</div><div class="wa-bal">₹1,250.75</div></div>
+          <div class="wa-card" onclick="quickFill('ACC1002')"><div class="wa-id">ACC1002</div><div class="wa-name">Rajarajeswari B.</div><div class="wa-bal">₹540.00</div></div>
+          <div class="wa-card" onclick="quickFill('ACC1003')"><div class="wa-id">ACC1003</div><div class="wa-name">Priya Agarwal</div><div class="wa-bal">₹0.00 · Zero</div></div>
+          <div class="wa-card" onclick="quickFill('ACC1004')"><div class="wa-id">ACC1004</div><div class="wa-name">Rahul Mehta</div><div class="wa-bal">₹3,200.50 · Leap yr</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea id="msg-input" placeholder="Type a message… or use a quick fill →" rows="1"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send (Enter)">➤</button>
+      </div>
+      <div class="input-hint">Enter to send · Shift+Enter for new line · Use sidebar quick-fills to test faster</div>
+    </div>
+  </main>
+
+  <!-- ── Debug Sidebar Right ── -->
+  <div class="debug-panel">
+    <div class="debug-header">
+      <span class="debug-title">Debug Panel</span>
+      <div class="debug-tabs">
+        <button class="dtab active" onclick="switchTab('turns')" id="tab-turns">Turns</button>
+        <button class="dtab" onclick="switchTab('health')" id="tab-health">Health</button>
+      </div>
+    </div>
+
+    <!-- Turns tab -->
+    <div class="debug-body" id="tab-body-turns">
+      <div class="empty-debug" id="turns-empty">No turns yet.<br>Start chatting →</div>
+    </div>
+
+    <!-- Health tab -->
+    <div class="debug-body" id="tab-body-health" style="display:none">
+      <button class="run-debug-btn" onclick="runDebug()">▶ Run Health Check</button>
+      <div id="health-output">
+        <div class="empty-debug">Click the button above<br>to test the external API.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────
+  const MOCK_MODE  = {{ 'true' if mock_mode else 'false' }};
+  const SESSION_ID = 'sess_' + Math.random().toString(36).slice(2, 10);
+  document.getElementById('session-badge').textContent = 'session: ' + SESSION_ID.slice(5);
+
+  if (MOCK_MODE) {
+    document.getElementById('api-dot').className   = 'api-dot mock';
+    document.getElementById('api-label').textContent = 'MOCK DATA';
+  }
+
+  // ── Step tracker ─────────────────────────────────
+  const STEP_ORDER = ['greeting','lookup','verification','balance','amount','card','done'];
+  const STATE_TO_STEP = {
+    'GREETING':             'greeting',
+    'ACCOUNT_LOOKUP':       'lookup',
+    'VERIFICATION':         'verification',
+    'BALANCE_PRESENTATION': 'balance',
+    'PAYMENT_AMOUNT':       'amount',
+    'CARD_COLLECTION':      'card',
+    'PAYMENT_PROCESSING':   'card',
+    'CLOSED':               'done',
+  };
+  let curStepIdx = 0;
+
+  function setStep(stateName) {
+    const step = STATE_TO_STEP[stateName];
+    if (!step) return;
+    const idx = STEP_ORDER.indexOf(step);
+    if (idx <= curStepIdx) return;
+    curStepIdx = idx;
+    document.querySelectorAll('.step').forEach(el => {
+      const i = STEP_ORDER.indexOf(el.dataset.step);
+      el.classList.remove('active','done');
+      if (i < idx) el.classList.add('done');
+      else if (i === idx) el.classList.add('active');
+    });
+    document.getElementById('state-badge').textContent = stateName.replace('_', ' ');
+  }
+
+  // ── Debug tabs ────────────────────────────────────
+  function switchTab(name) {
+    ['turns','health'].forEach(t => {
+      document.getElementById('tab-body-' + t).style.display = t === name ? 'flex' : 'none';
+      document.getElementById('tab-' + t).classList.toggle('active', t === name);
+    });
+    if (name === 'turns') document.getElementById('tab-body-turns').style.display = 'flex';
+  }
+
+  // ── Turn cards ────────────────────────────────────
+  let turnCount = 0;
+
+  function addTurnCard(turn, user, agent, state, ms) {
+    const empty = document.getElementById('turns-empty');
+    if (empty) empty.remove();
+
+    const body = document.getElementById('tab-body-turns');
+    const card = document.createElement('div');
+    card.className = 'turn-card';
+    card.innerHTML = `
+      <div class="turn-meta">
+        <span>Turn ${turn}</span>
+        <span class="turn-state">${state}</span>
+        <span>${ms}ms</span>
+      </div>
+      <div class="turn-user"><span>You: </span>${escHtml(user)}</div>
+      <div class="turn-agent">${escHtml(agent)}</div>
+    `;
+    body.appendChild(card);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0, 400);
+  }
+
+  // ── Health check ─────────────────────────────────
+  async function runDebug() {
+    document.getElementById('health-output').innerHTML =
+      '<div class="empty-debug">Running check…</div>';
+    switchTab('health');
+    try {
+      const res  = await fetch('/api/debug');
+      const data = await res.json();
+      renderHealth(data);
+    } catch(e) {
+      document.getElementById('health-output').innerHTML =
+        '<div class="empty-debug" style="color:var(--red)">Cannot reach Flask.<br>Is python app.py running?</div>';
+    }
+  }
+
+  function renderHealth(d) {
+    const ext = d.external_api || {};
+    const rows = [
+      ['Flask',        d.flask || '—',                       d.flask === 'ok' ? 'ok' : 'err'],
+      ['Mock mode',    d.mock_api ? 'YES ⚡' : 'NO',         d.mock_api ? 'warn' : 'ok'],
+      ['Sessions',     d.active_sessions ?? '—',             ''],
+      ['API verdict',  ext.verdict || '—',                   ext.verdict?.startsWith('✅') ? 'ok' : 'err'],
+      ['API status',   ext.status_code ?? '—',               ext.status_code === 200 ? 'ok' : 'err'],
+      ['API latency',  ext.ms != null ? ext.ms + ' ms' : '—', ''],
+      ['API URL',      (ext.url || '—').replace('https://','').slice(0,38), ''],
+    ];
+    if (ext.fix) rows.push(['FIX', ext.fix, 'warn']);
+
+    const html = rows.map(([k, v, cls]) =>
+      `<div class="health-row"><span class="health-key">${k}</span><span class="health-val ${cls}">${v}</span></div>`
+    ).join('');
+
+    document.getElementById('health-output').innerHTML =
+      `<div class="health-card">${html}</div>`;
+
+    // Update sidebar API dot
+    if (d.mock_api) {
+      setApiDot('mock', 'MOCK');
+    } else if (ext.verdict?.startsWith('✅')) {
+      setApiDot('ok', 'API OK');
+    } else {
+      setApiDot('err', 'API ERR');
+      showErrorBar(
+        ext.verdict + '. ' + (ext.fix || 'Run: MOCK_API=1 python app.py')
+      );
+    }
+  }
+
+  function setApiDot(cls, label) {
+    const dot = document.getElementById('api-dot');
+    dot.className = 'api-dot ' + cls;
+    document.getElementById('api-label').textContent = label;
+  }
+
+  function showErrorBar(msg) {
+    const bar = document.getElementById('error-bar');
+    document.getElementById('error-bar-text').textContent = msg;
+    bar.classList.add('visible');
+  }
+
+  // ── Messaging ─────────────────────────────────────
+  const messagesEl = document.getElementById('messages');
+  const inputEl    = document.getElementById('msg-input');
+  const sendBtn    = document.getElementById('send-btn');
+
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+  });
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+  function ts() { return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+
+  function renderMd(t) {
+    return t
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>');
+  }
+
+  function addMsg(text, role, isError=false) {
+    const row = document.createElement('div');
+    row.className = 'msg-row ' + role;
+
+    const av = document.createElement('div');
+    av.className = 'avatar ' + role;
+    av.textContent = role === 'agent' ? '🤖' : '👤';
+
+    const wrap = document.createElement('div');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ' + role + (isError ? ' error-bubble' : '');
+    bubble.innerHTML = renderMd(text);
+
+    const t = document.createElement('div');
+    t.className = 'ts'; t.textContent = ts();
+
+    wrap.appendChild(bubble); wrap.appendChild(t);
+    if (role === 'agent') { row.appendChild(av); row.appendChild(wrap); }
+    else                  { row.appendChild(wrap); row.appendChild(av); }
+    messagesEl.appendChild(row);
+    scrollBottom();
+  }
+
+  function showTyping() {
+    const row = document.createElement('div');
+    row.className = 'typing-row'; row.id = 'typing';
+    const av = document.createElement('div');
+    av.className = 'avatar agent'; av.textContent = '🤖';
+    const b = document.createElement('div');
+    b.className = 'typing-bubble';
+    b.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+    row.appendChild(av); row.appendChild(b);
+    messagesEl.appendChild(row); scrollBottom();
+  }
+  function hideTyping() { const t = document.getElementById('typing'); if(t) t.remove(); }
+
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast'; t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 5000);
+  }
+
+  // ── Send ─────────────────────────────────────────
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = ''; inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+    addMsg(text, 'user');
+    showTyping();
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: SESSION_ID, message: text}),
+      });
+      hideTyping();
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const detail = err.traceback
+          ? err.detail + '\n\nSee Flask console for full traceback.'
+          : (err.detail || `HTTP ${res.status}`);
+        addMsg('❌ Server error: ' + detail, 'agent', true);
+        showToast('Agent crashed — see debug panel');
+        switchTab('health'); runDebug();
+        sendBtn.disabled = false; return;
+      }
+
+      const data = await res.json();
+      addMsg(data.reply, 'agent');
+      setStep(data.state);
+      addTurnCard(data.turn, text, data.reply, data.state, data.ms);
+
+      // Detect API error in reply
+      if (data.reply.toLowerCase().includes('trouble connecting')) {
+        showErrorBar('External API unreachable. Run: MOCK_API=1 python app.py  or check /api/debug');
+        setApiDot('err', 'API ERR');
+      } else {
+        setApiDot('ok', 'API OK');
+        document.getElementById('error-bar').classList.remove('visible');
+      }
+
+    } catch(e) {
+      hideTyping();
+      showErrorBar('Cannot reach Flask at localhost. Is python app.py running?');
+      addMsg('❌ Cannot connect to Flask server.\n\nMake sure you ran:\n`python app.py`\n\nThen refresh.', 'agent', true);
+    }
+
+    sendBtn.disabled = false; inputEl.focus();
+  }
+
+  function quickFill(v) {
+    inputEl.value = v; inputEl.focus();
+    inputEl.dispatchEvent(new Event('input'));
+  }
+
+  async function resetSession() {
+    if (!confirm('Start a fresh session?')) return;
+    await fetch('/api/reset', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({session_id: SESSION_ID})}).catch(()=>{});
+    location.reload();
+  }
+
+  // ── Boot greeting ─────────────────────────────────
+  window.addEventListener('load', async () => {
+    showTyping();
+    try {
+      const res = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({session_id: SESSION_ID, message: 'hi'}),
+      });
+      hideTyping();
+      if (res.ok) {
+        const data = await res.json();
+        addMsg(data.reply, 'agent');
+        setStep(data.state);
+        addTurnCard(data.turn, 'hi', data.reply, data.state, data.ms);
+        if (!MOCK_MODE) runDebug();  // auto health-check on load
+      }
+    } catch {
+      hideTyping();
+      addMsg('⚠️ Flask not reachable.\n\nRun: python app.py\nThen refresh.', 'agent', true);
+      showErrorBar('Flask server is not running on this port.');
+    }
+    inputEl.focus();
+  });
+</script>
+</body>
+</html>
