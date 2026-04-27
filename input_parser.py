@@ -44,9 +44,10 @@ def extract_name(text: str) -> Optional[str]:
         if m:
             return m.group(1).strip()
 
-    # If input looks like a bare name (2-4 capitalised tokens, no other content)
+    # If input looks like a bare name: 2-4 tokens each starting with a capital letter.
+    # Requiring Title Case avoids matching common affirmations like "yes please".
     bare = text.strip()
-    if re.fullmatch(r"[A-Za-z][\w'-]+(?:\s+[A-Za-z][\w'-]+){1,3}", bare):
+    if re.fullmatch(r"[A-Z][a-z\w'-]*(?:\s+[A-Z][a-z\w'-]*){1,3}", bare):
         return bare
 
     return None
@@ -154,9 +155,10 @@ def extract_amount(text: str, max_amount: float) -> Tuple[Optional[float], Optio
 
 def extract_card_number(text: str) -> Optional[str]:
     """Extract a 16-digit card number (spaces/dashes allowed between groups)."""
-    # Remove spaces and dashes, find 16-digit sequence
+    # Remove spaces and dashes, then find exactly 16 consecutive digits.
+    # \b doesn't fire between a digit and a letter, so use lookahead/lookbehind instead.
     digits_only = re.sub(r'[\s\-]', '', text)
-    m = re.search(r'\b(\d{16})\b', digits_only)
+    m = re.search(r'(?<!\d)(\d{16})(?!\d)', digits_only)
     return m.group(1) if m else None
 
 
@@ -222,8 +224,9 @@ def extract_cardholder_name(text: str) -> Optional[str]:
         if m:
             return m.group(1).strip().rstrip(',')
 
-    # Bare name only if the whole input looks like a name (no other content)
+    # Bare name only if the whole input looks like a name (no other content).
+    # Requiring Title Case matches extract_name's bare fallback rule.
     bare = text.strip()
-    if re.fullmatch(r"[A-Za-z][\w'-]+(?:\s+[A-Za-z][\w'-]+){1,3}", bare):
+    if re.fullmatch(r"[A-Z][a-z\w'-]*(?:\s+[A-Z][a-z\w'-]*){1,3}", bare):
         return bare
     return None

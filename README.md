@@ -138,7 +138,24 @@ Agent: ✅ Payment Successful! Transaction ID: txn_...
 
 ---
 
-### 4. Edge Case — Leap Year DOB (ACC1004)
+### 4. Payment Failure — Expired Card (Retryable)
+
+```
+[After successful verification and amount entry]
+
+You:   Cardholder: Nithin Jain, Card: 4532015112830366, CVV: 123, Expiry: 06/2021
+Agent: ❌ The card expired on 06/2021. Please use a valid card.
+
+You:   12/2027
+Agent: ✅ Payment Successful! Transaction ID: txn_...
+```
+
+Note: expiry is validated client-side before the API call, so the user is prompted
+to correct it immediately without a network round-trip.
+
+---
+
+### 5. Edge Case — Leap Year DOB (ACC1004)
 
 ```
 You:   ACC1004

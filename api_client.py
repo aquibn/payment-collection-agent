@@ -150,7 +150,8 @@ def process_payment(account_id, amount, cardholder_name, card_number, cvv, expir
     except Exception:
         error_code = "unknown_error"
 
-    user_fixable = {"invalid_card", "invalid_cvv", "invalid_expiry", "invalid_amount"}
+    # insufficient_balance is retryable — user can enter a smaller amount
+    user_fixable = {"invalid_card", "invalid_cvv", "invalid_expiry", "invalid_amount", "insufficient_balance"}
     return {"success": False, "error": error_code, "retryable": error_code in user_fixable}
 
 

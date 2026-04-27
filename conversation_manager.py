@@ -232,9 +232,13 @@ class ConversationManager:
         )
 
     def _handle_balance_presentation(self, user_input: str) -> str:
-        """BALANCE_PRESENTATION: User confirms they want to pay → move to amount collection."""
+        """BALANCE_PRESENTATION: Wait for explicit yes/no before moving to payment."""
         lower = user_input.lower()
+
         negative_words = {"no", "nope", "not", "don't", "dont", "cancel", "exit", "quit", "stop"}
+        affirmative_words = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "proceed",
+                             "pay", "continue", "confirm", "go ahead", "please", "make"}
+
         if any(w in lower for w in negative_words):
             self._ctx.state = ConversationState.CLOSED
             return (
@@ -242,13 +246,20 @@ class ConversationManager:
                 "If you'd like to make a payment in the future, please start a new session. "
                 "Have a great day! 👋"
             )
-        # Treat any affirmative or non-negative response as a yes
-        self._ctx.state = ConversationState.PAYMENT_AMOUNT
-        balance = self._ctx.account_data.balance
+
+        if any(w in lower for w in affirmative_words):
+            self._ctx.state = ConversationState.PAYMENT_AMOUNT
+            balance = self._ctx.account_data.balance
+            return (
+                f"Great! Your outstanding balance is **₹{balance:,.2f}**.\n\n"
+                "How much would you like to pay? "
+                "You can pay the full amount or a partial amount (minimum ₹1.00)."
+            )
+
+        # Ambiguous input — re-prompt clearly
         return (
-            f"Great! Your outstanding balance is **₹{balance:,.2f}**.\n\n"
-            "How much would you like to pay? "
-            "You can pay the full amount or a partial amount (minimum ₹1.00)."
+            "I didn't quite catch that. Would you like to make a payment now?\n\n"
+            "Please reply **yes** to proceed or **no** to cancel."
         )
 
     def _handle_payment_amount(self, user_input: str) -> str:
@@ -332,6 +343,7 @@ class ConversationManager:
         if result["success"]:
             ctx.transaction_id = result["transaction_id"]
             ctx.state = ConversationState.CLOSED
+            ctx.card = CardData()  # clear sensitive card data immediately after use
             return self._payment_success_message()
 
         error_code = result.get("error", "unknown_error")
@@ -339,23 +351,24 @@ class ConversationManager:
         error_msg = api.payment_error_message(error_code)
 
         if retryable:
-            # Reset specific card fields so the user can re-enter them
-            if error_code in ("invalid_card",):
+            # Amount errors — send back to amount collection
+            if error_code in ("invalid_amount", "insufficient_balance"):
+                ctx.payment_amount = None
+                ctx.state = ConversationState.PAYMENT_AMOUNT
+                return f"❌ {error_msg}"
+            # Card field errors — reset only the bad field, stay in card collection
+            if error_code == "invalid_card":
                 card.card_number = None
             elif error_code == "invalid_cvv":
                 card.cvv = None
             elif error_code == "invalid_expiry":
                 card.expiry_month = None
                 card.expiry_year = None
-            elif error_code == "invalid_amount":
-                ctx.payment_amount = None
-                ctx.state = ConversationState.PAYMENT_AMOUNT
-                return f"❌ {error_msg}"
-            # Stay in CARD_COLLECTION for card errors
             ctx.state = ConversationState.CARD_COLLECTION
             return f"❌ {error_msg}"
 
-        # Terminal error
+        # Terminal error — clear card data and close
+        ctx.card = CardData()
         ctx.state = ConversationState.CLOSED
         return (
             f"❌ Payment could not be completed: {error_msg}\n\n"
